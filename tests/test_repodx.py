@@ -63,6 +63,19 @@ class RepoDxTests(unittest.TestCase):
 
             self.assertEqual(result, [])
 
+    def test_find_junk_files_skips_directories_ignored_with_content_globs(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            (repo_path / ".gitignore").write_text(
+                "node_modules/*\n__pycache__/*\n", encoding="utf-8"
+            )
+            (repo_path / "node_modules").mkdir()
+            (repo_path / "__pycache__").mkdir()
+
+            result = repodx.find_junk_files(repo_path)
+
+            self.assertEqual(result, [])
+
     def test_find_junk_files_does_not_report_files_inside_junk_directories(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_path = Path(temp_dir)
@@ -114,6 +127,17 @@ class RepoDxTests(unittest.TestCase):
 
             self.assertEqual(result, [])
 
+    def test_check_gitignore_accepts_directory_content_globs(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            (repo_path / ".gitignore").write_text(
+                "__pycache__/*\n.env\nnode_modules/*\n", encoding="utf-8"
+            )
+
+            result = repodx.check_gitignore(repo_path)
+
+            self.assertEqual(result, [])
+
     def test_has_gitignore_entry_accepts_double_star_prefix_and_slash_variants(self):
         entries = ["**/__pycache__/", ".env", "**/node_modules"]
 
@@ -121,6 +145,12 @@ class RepoDxTests(unittest.TestCase):
         self.assertTrue(repodx.has_gitignore_entry(entries, "__pycache__"))
         self.assertTrue(repodx.has_gitignore_entry(entries, "node_modules/"))
         self.assertTrue(repodx.has_gitignore_entry(entries, "node_modules"))
+
+    def test_has_gitignore_entry_accepts_directory_content_globs(self):
+        entries = ["**/__pycache__/*", ".env", "node_modules/*"]
+
+        self.assertTrue(repodx.has_gitignore_entry(entries, "__pycache__/"))
+        self.assertTrue(repodx.has_gitignore_entry(entries, "node_modules/"))
 
     def test_check_gitignore_reports_unreadable_file(self):
         repo_path = SAMPLE_DIR / "bad_gitignore_repo"
