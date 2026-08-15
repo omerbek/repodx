@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+node_modules/
+*.log
+*.tmp
+.DS_Store
+
+# Keep intentionally broken sample files for tests.
+!sample_repo/
+!sample_repo/**
+!sample_repo/__pycache__/
+!sample_repo/__pycache__/**
+!sample_repo/node_modules/
+!sample_repo/node_modules/**
