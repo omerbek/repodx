@@ -4,6 +4,7 @@ import re
 
 
 COMMON_GITIGNORE_ENTRIES = ["__pycache__/", ".env", "node_modules/"]
+JUNK_DIRECTORY_NAMES = ["__pycache__", "node_modules"]
 README_INSTALLATION_HEADINGS = ["installation", "install", "kurulum"]
 README_USAGE_HEADINGS = ["usage", "use", "kullanim", "kullanım"]
 
@@ -12,17 +13,22 @@ def read_gitignore_entries(repo_path):
     gitignore_path = repo_path / ".gitignore"
 
     if not gitignore_path.exists():
-        return None
+        return None, []
 
     entries = []
 
-    for line in gitignore_path.read_text(encoding="utf-8").splitlines():
+    try:
+        gitignore_text = gitignore_path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError) as error:
+        return [], [f"Could not read .gitignore: {error}"]
+
+    for line in gitignore_text.splitlines():
         clean_line = line.strip()
 
         if clean_line and not clean_line.startswith("#"):
             entries.append(clean_line)
 
-    return entries
+    return entries, []
 
 
 def has_gitignore_entry(entries, expected_entry):
@@ -32,7 +38,7 @@ def has_gitignore_entry(entries, expected_entry):
     normalized_expected = expected_entry.strip("/")
 
     for entry in entries:
-        normalized_entry = entry.strip("/")
+        normalized_entry = entry.removeprefix("**/").strip("/")
 
         if normalized_entry == normalized_expected:
             return True
@@ -41,7 +47,8 @@ def has_gitignore_entry(entries, expected_entry):
 
 
 def find_junk_files(repo_path):
-    entries = read_gitignore_entries(repo_path)
+    entries, _ = read_gitignore_entries(repo_path)
+    pycache_is_ignored = has_gitignore_entry(entries, "__pycache__/")
     node_modules_is_ignored = has_gitignore_entry(entries, "node_modules/")
     junk_items = []
 
@@ -52,7 +59,10 @@ def find_junk_files(repo_path):
         if ".git" in relative_path.parts:
             continue
 
-        if path.is_dir() and path.name == "__pycache__":
+        if any(part in JUNK_DIRECTORY_NAMES for part in relative_path.parts[:-1]):
+            continue
+
+        if path.is_dir() and path.name == "__pycache__" and not pycache_is_ignored:
             junk_items.append(relative_text + "/")
             continue
 
@@ -71,10 +81,13 @@ def find_junk_files(repo_path):
 
 
 def check_gitignore(repo_path):
-    entries = read_gitignore_entries(repo_path)
+    entries, read_issues = read_gitignore_entries(repo_path)
 
     if entries is None:
         return ["Missing .gitignore file"]
+
+    if read_issues:
+        return read_issues
 
     missing_entries = []
 
@@ -113,7 +126,11 @@ def check_readme(repo_path):
     if not readme_path.exists():
         return ["Missing README.md file"]
 
-    readme_text = readme_path.read_text(encoding="utf-8")
+    try:
+        readme_text = readme_path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError) as error:
+        return [f"Could not read README.md: {error}"]
+
     headings = markdown_headings(readme_text)
     issues = []
 
