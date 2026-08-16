@@ -253,6 +253,18 @@ class RepoDxTests(unittest.TestCase):
 
             self.assertEqual(result, [])
 
+    def test_check_readme_accepts_setext_headings(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            (repo_path / "README.md").write_text(
+                "Project\n=======\n\nInstallation\n------------\n\nUsage\n-----\n",
+                encoding="utf-8",
+            )
+
+            result = repodx.check_readme(repo_path)
+
+            self.assertEqual(result, [])
+
     def test_check_readme_reports_unreadable_file(self):
         repo_path = SAMPLE_DIR / "bad_readme_repo"
 
@@ -269,6 +281,30 @@ class RepoDxTests(unittest.TestCase):
                 "```python\n"
                 "# Installation\n"
                 "# Usage\n"
+                "```\n",
+                encoding="utf-8",
+            )
+
+            result = repodx.check_readme(repo_path)
+
+            self.assertEqual(
+                result,
+                [
+                    "Missing README heading: Installation",
+                    "Missing README heading: Usage",
+                ],
+            )
+
+    def test_check_readme_ignores_setext_headings_inside_code_blocks(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            (repo_path / "README.md").write_text(
+                "# Project\n\n"
+                "```text\n"
+                "Installation\n"
+                "------------\n"
+                "Usage\n"
+                "-----\n"
                 "```\n",
                 encoding="utf-8",
             )
