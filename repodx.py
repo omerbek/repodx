@@ -34,8 +34,11 @@ def read_gitignore_entries(repo_path):
 def normalize_gitignore_directory_entry(entry):
     normalized_entry = entry.removeprefix("**/").strip("/")
 
-    if normalized_entry.endswith("/*"):
-        normalized_entry = normalized_entry[:-2].strip("/")
+    while normalized_entry.endswith("/**") or normalized_entry.endswith("/*"):
+        if normalized_entry.endswith("/**"):
+            normalized_entry = normalized_entry[:-3].strip("/")
+        else:
+            normalized_entry = normalized_entry[:-2].strip("/")
 
     return normalized_entry
 
