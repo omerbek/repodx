@@ -112,8 +112,18 @@ def check_gitignore(repo_path):
 
 def markdown_headings(markdown_text):
     headings = []
+    inside_fenced_code_block = False
 
     for line in markdown_text.splitlines():
+        stripped_line = line.strip()
+
+        if stripped_line.startswith("```") or stripped_line.startswith("~~~"):
+            inside_fenced_code_block = not inside_fenced_code_block
+            continue
+
+        if inside_fenced_code_block:
+            continue
+
         match = re.match(r"^\s{0,3}#{1,6}\s+(.+?)\s*$", line)
 
         if match:
