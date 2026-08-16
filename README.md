@@ -6,6 +6,8 @@ It scans a local folder and reports a few common cleanup issues:
 
 - temporary files such as `.tmp` and `.log`
 - Python cache folders such as `__pycache__/`
+- local Python virtual environment folders such as `.venv/`, `venv/`, and
+  `env/`
 - `.DS_Store`
 - `node_modules/` when it is not ignored
 - missing or incomplete `.gitignore`
@@ -84,6 +86,12 @@ README
   - Missing README heading: Installation
   - Missing README heading: Usage
 ```
+
+Exit codes:
+
+- `0`: no issues found
+- `1`: one or more hygiene issues found
+- `2`: the given path is not a directory
 
 ## Why This Exists
 

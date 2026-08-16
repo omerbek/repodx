@@ -106,6 +106,32 @@ class RepoDxTests(unittest.TestCase):
 
             self.assertEqual(result, ["__pycache__/", "node_modules/"])
 
+    def test_find_junk_files_reports_python_virtualenv_directories(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            (repo_path / ".gitignore").write_text(".env\n", encoding="utf-8")
+            (repo_path / ".venv").mkdir()
+            (repo_path / "venv").mkdir()
+            (repo_path / "env").mkdir()
+
+            result = repodx.find_junk_files(repo_path)
+
+            self.assertEqual(result, [".venv/", "env/", "venv/"])
+
+    def test_find_junk_files_skips_ignored_python_virtualenv_directories(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            (repo_path / ".gitignore").write_text(
+                ".venv/\nvenv/*\nenv/**\n", encoding="utf-8"
+            )
+            (repo_path / ".venv").mkdir()
+            (repo_path / "venv").mkdir()
+            (repo_path / "env").mkdir()
+
+            result = repodx.find_junk_files(repo_path)
+
+            self.assertEqual(result, [])
+
     def test_check_gitignore_reports_missing_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_path = Path(temp_dir)
@@ -263,6 +289,52 @@ class RepoDxTests(unittest.TestCase):
                     "Missing README heading: Usage",
                 ],
             )
+
+    def test_check_readme_ignores_headings_inside_fenced_code_blocks(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            (repo_path / "README.md").write_text(
+                "# Project\n\n"
+                "```python\n"
+                "# Installation\n"
+                "# Usage\n"
+                "```\n",
+                encoding="utf-8",
+            )
+
+            result = repodx.check_readme(repo_path)
+
+            self.assertEqual(
+                result,
+                [
+                    "Missing README heading: Installation",
+                    "Missing README heading: Usage",
+                ],
+            )
+
+    def test_main_returns_failure_when_issues_are_found(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+
+            with mock.patch("sys.argv", ["repodx.py", str(repo_path)]):
+                result = repodx.main()
+
+            self.assertEqual(result, 1)
+
+    def test_main_returns_success_when_no_issues_are_found(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            (repo_path / ".gitignore").write_text(
+                "__pycache__/\n.env\nnode_modules/\n", encoding="utf-8"
+            )
+            (repo_path / "README.md").write_text(
+                "# Project\n\n## Installation\n\n## Usage\n", encoding="utf-8"
+            )
+
+            with mock.patch("sys.argv", ["repodx.py", str(repo_path)]):
+                result = repodx.main()
+
+            self.assertEqual(result, 0)
 
     def test_build_report_combines_all_checks(self):
         sample_path = Path("sample_repo")

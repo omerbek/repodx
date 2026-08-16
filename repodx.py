@@ -4,7 +4,7 @@ import re
 
 
 COMMON_GITIGNORE_ENTRIES = ["__pycache__/", ".env", "node_modules/"]
-JUNK_DIRECTORY_NAMES = ["__pycache__", "node_modules"]
+JUNK_DIRECTORY_NAMES = ["__pycache__", "node_modules", ".venv", "venv", "env"]
 README_INSTALLATION_HEADINGS = ["installation", "install", "kurulum"]
 README_USAGE_HEADINGS = ["usage", "use", "kullanim", "kullanım"]
 
@@ -60,8 +60,11 @@ def has_gitignore_entry(entries, expected_entry):
 
 def find_junk_files(repo_path):
     entries, _ = read_gitignore_entries(repo_path)
-    pycache_is_ignored = has_gitignore_entry(entries, "__pycache__/")
-    node_modules_is_ignored = has_gitignore_entry(entries, "node_modules/")
+    ignored_junk_directories = {
+        directory_name
+        for directory_name in JUNK_DIRECTORY_NAMES
+        if has_gitignore_entry(entries, f"{directory_name}/")
+    }
     junk_items = []
 
     for path in repo_path.rglob("*"):
@@ -74,11 +77,11 @@ def find_junk_files(repo_path):
         if any(part in JUNK_DIRECTORY_NAMES for part in relative_path.parts[:-1]):
             continue
 
-        if path.is_dir() and path.name == "__pycache__" and not pycache_is_ignored:
-            junk_items.append(relative_text + "/")
-            continue
-
-        if path.is_dir() and path.name == "node_modules" and not node_modules_is_ignored:
+        if (
+            path.is_dir()
+            and path.name in JUNK_DIRECTORY_NAMES
+            and path.name not in ignored_junk_directories
+        ):
             junk_items.append(relative_text + "/")
             continue
 
@@ -112,8 +115,31 @@ def check_gitignore(repo_path):
 
 def markdown_headings(markdown_text):
     headings = []
+    in_fenced_code_block = False
+    fence_character = ""
+    fence_length = 0
 
     for line in markdown_text.splitlines():
+        fence_match = re.match(r"^\s{0,3}(`{3,}|~{3,})", line)
+
+        if fence_match:
+            fence_marker = fence_match.group(1)
+
+            if not in_fenced_code_block:
+                in_fenced_code_block = True
+                fence_character = fence_marker[0]
+                fence_length = len(fence_marker)
+            elif (
+                fence_marker[0] == fence_character
+                and len(fence_marker) >= fence_length
+            ):
+                in_fenced_code_block = False
+
+            continue
+
+        if in_fenced_code_block:
+            continue
+
         match = re.match(r"^\s{0,3}#{1,6}\s+(.+?)\s*$", line)
 
         if match:
