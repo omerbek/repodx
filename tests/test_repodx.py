@@ -235,6 +235,45 @@ class RepoDxTests(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertTrue(result[0].startswith("Could not read README.md:"))
 
+    def test_check_readme_ignores_heading_like_lines_inside_code_blocks(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            (repo_path / "README.md").write_text(
+                "# Project\n\n"
+                "```python\n"
+                "# Installation\n"
+                "# Usage\n"
+                "```\n",
+                encoding="utf-8",
+            )
+
+            result = repodx.check_readme(repo_path)
+
+            self.assertEqual(
+                result,
+                [
+                    "Missing README heading: Installation",
+                    "Missing README heading: Usage",
+                ],
+            )
+
+    def test_check_readme_accepts_real_headings_around_code_blocks(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            (repo_path / "README.md").write_text(
+                "# Project\n\n"
+                "## Installation\n\n"
+                "```python\n"
+                "# Not a heading\n"
+                "```\n\n"
+                "## Usage\n",
+                encoding="utf-8",
+            )
+
+            result = repodx.check_readme(repo_path)
+
+            self.assertEqual(result, [])
+
     def test_check_readme_reports_os_error(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_path = Path(temp_dir)
