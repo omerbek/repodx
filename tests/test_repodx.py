@@ -76,6 +76,32 @@ class RepoDxTests(unittest.TestCase):
 
             self.assertEqual(result, [])
 
+    def test_find_junk_files_reports_unignored_virtual_environment_folders(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            (repo_path / ".gitignore").write_text(".env\n", encoding="utf-8")
+            (repo_path / ".venv").mkdir()
+            (repo_path / "venv").mkdir()
+            (repo_path / "env").mkdir()
+
+            result = repodx.find_junk_files(repo_path)
+
+            self.assertEqual(result, [".venv/", "env/", "venv/"])
+
+    def test_find_junk_files_skips_ignored_virtual_environment_folders(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            (repo_path / ".gitignore").write_text(
+                ".venv/\nvenv/\nenv/\n", encoding="utf-8"
+            )
+            (repo_path / ".venv").mkdir()
+            (repo_path / "venv").mkdir()
+            (repo_path / "env").mkdir()
+
+            result = repodx.find_junk_files(repo_path)
+
+            self.assertEqual(result, [])
+
     def test_find_junk_files_skips_directories_ignored_with_double_star_content_globs(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_path = Path(temp_dir)
