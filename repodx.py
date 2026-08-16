@@ -4,7 +4,8 @@ import re
 
 
 COMMON_GITIGNORE_ENTRIES = ["__pycache__/", ".env", "node_modules/"]
-JUNK_DIRECTORY_NAMES = ["__pycache__", "node_modules"]
+JUNK_DIRECTORY_NAMES = ["__pycache__", "node_modules", ".venv", "venv", "env"]
+VIRTUAL_ENVIRONMENT_DIRECTORY_NAMES = [".venv", "venv", "env"]
 README_INSTALLATION_HEADINGS = ["installation", "install", "kurulum"]
 README_USAGE_HEADINGS = ["usage", "use", "kullanim", "kullanım"]
 
@@ -62,6 +63,11 @@ def find_junk_files(repo_path):
     entries, _ = read_gitignore_entries(repo_path)
     pycache_is_ignored = has_gitignore_entry(entries, "__pycache__/")
     node_modules_is_ignored = has_gitignore_entry(entries, "node_modules/")
+    ignored_virtual_environment_names = [
+        name
+        for name in VIRTUAL_ENVIRONMENT_DIRECTORY_NAMES
+        if has_gitignore_entry(entries, name + "/")
+    ]
     junk_items = []
 
     for path in repo_path.rglob("*"):
@@ -79,6 +85,14 @@ def find_junk_files(repo_path):
             continue
 
         if path.is_dir() and path.name == "node_modules" and not node_modules_is_ignored:
+            junk_items.append(relative_text + "/")
+            continue
+
+        if (
+            path.is_dir()
+            and path.name in VIRTUAL_ENVIRONMENT_DIRECTORY_NAMES
+            and path.name not in ignored_virtual_environment_names
+        ):
             junk_items.append(relative_text + "/")
             continue
 
