@@ -20,7 +20,7 @@ starter tool that can be understood by a beginner.
 Clone the repository and run it with Python:
 
 ```powershell
-git clone https://github.com/YOUR_USERNAME/repodx.git
+git clone https://github.com/omerbek/repodx.git
 cd repodx
 python repodx.py .
 ```
@@ -28,7 +28,7 @@ python repodx.py .
 On macOS or Linux:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/repodx.git
+git clone https://github.com/omerbek/repodx.git
 cd repodx
 python3 repodx.py .
 ```
