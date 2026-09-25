@@ -983,6 +983,14 @@ def format_text(report, color=False):
     return "\n".join(lines)
 
 
+def format_quiet(report):
+    counts = report["counts"]
+    return (
+        f"RepoDx: {report['score']}/100 ({report['grade']}), "
+        f"{counts['critical']} critical, {counts['warning']} warnings, {counts['info']} info"
+    )
+
+
 def format_markdown(report):
     counts = report["counts"]
     lines = [
@@ -1334,6 +1342,11 @@ def parse_args(argv=None):
         action="store_true",
         help="Print a README badge with your score instead of the report.",
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Print only the score line for text output.",
+    )
     parser.add_argument("--version", action="version", version=f"repodx {__version__}")
     return parser.parse_args(argv)
 
@@ -1364,6 +1377,8 @@ def main(argv=None):
         print(json.dumps(dict(report, fixes=fixes) if fixes else report, indent=2))
     elif args.format == "prompt":
         print(format_prompt(report))
+    elif args.quiet and args.format == "text":
+        print(format_quiet(report))
     else:
         if fixes:
             print(format_fix_summary(fixes, report) + "\n")

@@ -921,6 +921,20 @@ class ReportTests(unittest.TestCase):
             with mock.patch("sys.stderr", new=io.StringIO()):
                 self.assertEqual(repodx.main([str(repo_path / "missing")]), 2)
 
+    def test_quiet_output_prints_score_line_and_keeps_exit_codes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = self.clean_repo(temp_dir)
+            (repo_path / "debug.log").write_text("log", encoding="utf-8")
+            output = io.StringIO()
+
+            with mock.patch("sys.stdout", new=output):
+                self.assertEqual(repodx.main([str(repo_path), "--quiet"]), 1)
+
+            self.assertEqual(output.getvalue(), "RepoDx: 92/100 (A), 0 critical, 1 warnings, 0 info\n")
+
+            with mock.patch("sys.stdout", new=io.StringIO()):
+                self.assertEqual(repodx.main([str(repo_path), "--quiet", "--fail-on", "critical"]), 0)
+
     def test_json_output(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_path = self.clean_repo(temp_dir)
