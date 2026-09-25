@@ -514,6 +514,130 @@ def mask_secret(value):
     return value[:6] + "..." + value[-2:]
 
 
+class StagedScanError(Exception):
+    """An error while reading the Git index for a staged scan."""
+
+
+def _run_git(repo_path, args, input_data=None):
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=repo_path,
+            input=input_data,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+    except OSError as error:
+        raise StagedScanError("Git must be installed to use --staged.") from error
+
+    if result.returncode:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        raise StagedScanError(detail or "Git could not read the staged files.")
+
+    return result.stdout
+
+
+def read_staged_files(repo_path):
+    """Return paths, contents, and sizes from the index for added/changed files."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=repo_path,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+    except OSError as error:
+        raise StagedScanError("Git must be installed to use --staged.") from error
+
+    if result.returncode:
+        raise StagedScanError("--staged needs a path inside a Git repository.")
+
+    root = Path(os.fsdecode(result.stdout.strip())).resolve()
+    changed_paths = _run_git(
+        root,
+        ["diff", "--cached", "--name-only", "--diff-filter=ACM", "-z"],
+    ).split(b"\0")
+    changed_paths = {path for path in changed_paths if path}
+
+    if not changed_paths:
+        return root, [], {}, {}
+
+    index_entries = _run_git(root, ["ls-files", "--stage", "-z"])
+    index_blobs = {}
+
+    for entry in index_entries.split(b"\0"):
+        if not entry:
+            continue
+        metadata, separator, path = entry.partition(b"\t")
+        if not separator:
+            continue
+        mode, object_id, stage = metadata.split()
+        if stage == b"0" and mode != b"160000":  # submodules are commits, not file contents
+            index_blobs[path] = object_id
+
+    staged = [(path, index_blobs[path]) for path in sorted(changed_paths) if path in index_blobs]
+    if not staged:
+        return root, [], {}, {}
+
+    object_ids = list(dict.fromkeys(object_id for _path, object_id in staged))
+    size_output = _run_git(
+        root,
+        ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
+        b"\n".join(object_ids) + b"\n",
+    )
+    object_sizes = {}
+
+    for line in size_output.splitlines():
+        parts = line.split()
+        if len(parts) != 3 or parts[1] != b"blob":
+            raise StagedScanError("Git returned an invalid staged file entry.")
+        object_sizes[parts[0]] = int(parts[2])
+
+    small_object_ids = [
+        object_id for object_id in object_ids if object_sizes[object_id] <= MAX_SCANNED_FILE_BYTES
+    ]
+    object_contents = {}
+
+    if small_object_ids:
+        output = _run_git(
+            root,
+            ["cat-file", "--batch"],
+            b"\n".join(small_object_ids) + b"\n",
+        )
+        offset = 0
+
+        while offset < len(output):
+            header_end = output.find(b"\n", offset)
+            if header_end < 0:
+                raise StagedScanError("Git returned a truncated staged file.")
+            header = output[offset:header_end].split()
+            if len(header) != 3 or header[1] != b"blob":
+                raise StagedScanError("Git returned an invalid staged file entry.")
+            object_id, _object_type, size_bytes = header
+            size = int(size_bytes)
+            start = header_end + 1
+            end = start + size
+            if end >= len(output) or output[end : end + 1] != b"\n":
+                raise StagedScanError("Git returned a truncated staged file.")
+            object_contents[object_id] = output[start:end]
+            offset = end + 1
+
+    files = []
+    contents = {}
+    sizes = {}
+
+    for raw_path, object_id in staged:
+        path = os.fsdecode(raw_path)
+        files.append(path)
+        sizes[path] = object_sizes[object_id]
+        if object_id in object_contents:
+            contents[path] = object_contents[object_id]
+
+    return root, files, contents, sizes
+
+
 def read_text_file(path):
     try:
         if path.stat().st_size > MAX_SCANNED_FILE_BYTES:
@@ -526,6 +650,17 @@ def read_text_file(path):
     if b"\0" in data[:4096]:
         return None
 
+    return data.decode("utf-8", errors="replace")
+
+
+def read_repo_text_file(repo_path, relative_text, staged_contents=None):
+    """Read a worktree file, or the staged blob when a snapshot was supplied."""
+    if staged_contents is None:
+        return read_text_file(repo_path / relative_text)
+
+    data = staged_contents.get(relative_text)
+    if data is None or b"\0" in data[:4096]:
+        return None
     return data.decode("utf-8", errors="replace")
 
 
@@ -629,12 +764,12 @@ def secret_severity_and_title(relative_text, severity, title):
     return severity, title
 
 
-def check_file_contents(repo_path, files):
+def check_file_contents(repo_path, files, staged_contents=None, include_env_example=True):
     findings = []
     uses_env_variables = False
 
     for relative_text in files:
-        text = read_text_file(repo_path / relative_text)
+        text = read_repo_text_file(repo_path, relative_text, staged_contents)
 
         if text is None:
             continue
@@ -671,7 +806,7 @@ def check_file_contents(repo_path, files):
 
     names = {relative_text.rsplit("/", 1)[-1].lower() for relative_text in files}
 
-    if uses_env_variables and not any(is_env_example_name(name) for name in names):
+    if include_env_example and uses_env_variables and not any(is_env_example_name(name) for name in names):
         findings.append(make_finding("env-example", "info", "No .env.example file"))
 
     return findings
@@ -683,7 +818,10 @@ def is_env_example_name(name):
 
 def has_only_public_variables(path):
     """True when every variable uses a prefix that frameworks expose to the browser anyway."""
-    text = read_text_file(path) or ""
+    return has_only_public_variables_text(read_text_file(path) or "")
+
+
+def has_only_public_variables_text(text):
     names = re.findall(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=", text, flags=re.MULTILINE)
     return bool(names) and all(name.startswith(PUBLIC_ENV_PREFIXES) for name in names)
 
@@ -705,14 +843,14 @@ def classify_public_prefixed_secret(name):
     return None
 
 
-def check_public_env_secrets(repo_path, files):
+def check_public_env_secrets(repo_path, files, staged_contents=None):
     """Flag public-prefixed env names that look like secrets (issue #18)."""
     findings = []
     seen = set()
 
     for relative_text in files:
         name = relative_text.rsplit("/", 1)[-1].lower()
-        text = read_text_file(repo_path / relative_text)
+        text = read_repo_text_file(repo_path, relative_text, staged_contents)
         # Only public-prefixed names are reported, so files without a prefix cannot have findings.
         if text is None or not any(prefix in text for prefix in PUBLIC_ENV_PREFIXES):
             continue
@@ -750,7 +888,7 @@ def check_public_env_secrets(repo_path, files):
     return findings
 
 
-def check_env_files(repo_path, files):
+def check_env_files(repo_path, files, staged_contents=None):
     findings = []
 
     for relative_text in files:
@@ -760,10 +898,16 @@ def check_env_files(repo_path, files):
             continue
 
         # Frameworks such as Next.js commit .env.development/.env.production on purpose.
+        if staged_contents is None:
+            public_variables_only = has_only_public_variables(repo_path / relative_text)
+        else:
+            text = read_repo_text_file(repo_path, relative_text, staged_contents) or ""
+            public_variables_only = has_only_public_variables_text(text)
+
         if (
             (name == ".env" or name.endswith(".local"))
             and not is_test_path(relative_text)
-            and not has_only_public_variables(repo_path / relative_text)
+            and not public_variables_only
         ):
             findings.append(
                 make_finding("env-file", "critical", "Environment file is not ignored", relative_text)
@@ -776,14 +920,19 @@ def check_env_files(repo_path, files):
     return findings
 
 
-def check_large_files(repo_path, files):
+def check_large_files(repo_path, files, staged_sizes=None):
     findings = []
 
     for relative_text in files:
-        try:
-            size = (repo_path / relative_text).stat().st_size
-        except OSError:
-            continue
+        if staged_sizes is not None:
+            size = staged_sizes.get(relative_text)
+            if size is None:
+                continue
+        else:
+            try:
+                size = (repo_path / relative_text).stat().st_size
+            except OSError:
+                continue
 
         size_text = f"{size / (1024 * 1024):.0f} MB"
 
@@ -813,7 +962,7 @@ def sql_table_name(raw_name):
     return parts[-1]
 
 
-def check_supabase_rls(repo_path, files):
+def check_supabase_rls(repo_path, files, staged_contents=None):
     created_tables = {}
     protected_tables = set()
 
@@ -821,7 +970,7 @@ def check_supabase_rls(repo_path, files):
         if not relative_text.lower().endswith(".sql") or "supabase/" not in relative_text.lower():
             continue
 
-        text = read_text_file(repo_path / relative_text)
+        text = read_repo_text_file(repo_path, relative_text, staged_contents)
 
         if text is None:
             continue
@@ -872,7 +1021,7 @@ def public_firebase_access(code):
     return None
 
 
-def check_firebase_rules(repo_path, files):
+def check_firebase_rules(repo_path, files, staged_contents=None):
     findings = []
 
     for relative_text in files:
@@ -881,7 +1030,7 @@ def check_firebase_rules(repo_path, files):
         if name not in ["firestore.rules", "storage.rules", "database.rules.json"]:
             continue
 
-        text = read_text_file(repo_path / relative_text) or ""
+        text = read_repo_text_file(repo_path, relative_text, staged_contents) or ""
 
         for line_number, line in enumerate(text.splitlines(), start=1):
             access = public_firebase_access(line.split("//", 1)[0])
@@ -970,6 +1119,24 @@ def build_report(repo_path):
     findings += check_license(repo_path)
     findings += check_agent_files(repo_path, files)
 
+    return make_report(repo_path, files, findings)
+
+
+def build_staged_report(repo_path):
+    """Build a content-only report from the staged index snapshot."""
+    repo_path, files, contents, sizes = read_staged_files(repo_path)
+    findings = []
+    findings += check_file_contents(repo_path, files, contents, include_env_example=False)
+    findings += check_env_files(repo_path, files, contents)
+    findings += check_public_env_secrets(repo_path, files, contents)
+    findings += check_supabase_rls(repo_path, files, contents)
+    findings += check_firebase_rules(repo_path, files, contents)
+    findings += check_large_files(repo_path, files, sizes)
+
+    return make_report(repo_path, files, findings)
+
+
+def make_report(repo_path, files, findings):
     findings.sort(key=lambda finding: SEVERITIES.index(finding["severity"]))
     counts = {severity: 0 for severity in SEVERITIES}
 
@@ -1384,7 +1551,7 @@ def hook_script():
         "#!/bin/sh\n"
         f"{HOOK_MARKER}: blocks commits while RepoDx finds critical problems (leaked keys, .env files).\n"
         "# Skip it once with: git commit --no-verify\n"
-        f'output=$({hook_command()} --fail-on critical "$(git rev-parse --show-toplevel)" 2>&1) || {{\n'
+        f'output=$({hook_command()} --staged --fail-on critical "$(git rev-parse --show-toplevel)" 2>&1) || {{\n'
         '  echo "$output"\n'
         '  echo ""\n'
         '  echo "repodx: commit blocked because of critical findings above."\n'
@@ -1404,7 +1571,7 @@ def install_hook(repo_path):
 
     if hook_path.exists() and HOOK_MARKER not in hook_path.read_text(encoding="utf-8", errors="replace"):
         print(f"A pre-commit hook already exists at {hook_path} and was not installed by RepoDx.")
-        print(f"Add this line to it instead: {hook_command()} --fail-on critical .")
+        print(f"Add this line to it instead: {hook_command()} --staged --fail-on critical .")
         return 1
 
     hooks_dir.mkdir(parents=True, exist_ok=True)
@@ -1452,6 +1619,11 @@ def parse_args(argv=None):
         help="Apply safe fixes (.gitignore entries, .env.example), then scan again.",
     )
     parser.add_argument(
+        "--staged",
+        action="store_true",
+        help="Scan only added or changed files from the Git index.",
+    )
+    parser.add_argument(
         "--install-hook",
         action="store_true",
         help="Install a Git pre-commit hook that blocks commits with critical findings.",
@@ -1484,10 +1656,19 @@ def main(argv=None):
         print(f"Error: path is not a directory: {repo_path}", file=sys.stderr)
         return 2
 
+    if args.staged and (args.fix or args.install_hook):
+        print("Error: --staged cannot be combined with --fix or --install-hook.", file=sys.stderr)
+        return 2
+
     if args.install_hook:
         return install_hook(repo_path)
 
-    report = build_report(repo_path)
+    try:
+        report = build_staged_report(repo_path) if args.staged else build_report(repo_path)
+    except StagedScanError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 2
+
     fixes = None
 
     if args.fix:

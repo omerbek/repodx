@@ -1,7 +1,7 @@
 - id: repodx
   name: repodx
   description: Block commits that leak secrets or add junk files.
-  entry: repodx
+  entry: repodx --staged
   language: python
   pass_filenames: false
   always_run: true

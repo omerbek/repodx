@@ -82,11 +82,16 @@ its location and fix, plus rules such as "never print or commit secret values"
 and "run `repodx .` when you're done". Paste it into Cursor, Claude Code, Lovable
 or Bolt.
 
-**`repodx --install-hook`** installs a Git `pre-commit` hook, so a commit is
-blocked while RepoDx finds a critical problem such as a leaked key or an
-unignored `.env` file. A secret stopped before the commit never enters your Git
-history. Skip the check once with `git commit --no-verify`. RepoDx doesn't
-overwrite a `pre-commit` hook that it didn't install.
+**`repodx --install-hook`** installs a Git `pre-commit` hook. It checks the
+staged snapshot, so it catches a secret that is staged even if you remove it
+from the working tree before committing, and ignores unrelated unstaged files.
+A commit is blocked for a critical finding such as a leaked key or an
+unignored `.env` file. Skip the check once with `git commit --no-verify`.
+RepoDx doesn't overwrite a `pre-commit` hook that it didn't install.
+
+Run **`repodx --staged`** to scan the same staged snapshot manually. It checks
+file contents and sizes without running repository-wide README, license, or
+`.gitignore` checks.
 
 ### GitHub Action
 

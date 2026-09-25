@@ -1429,6 +1429,114 @@ class PromptTests(unittest.TestCase):
 
 
 @unittest.skipUnless(shutil.which("git"), "git is not installed")
+class StagedScanTests(unittest.TestCase):
+    def git(self, repo_path, *args):
+        return subprocess.run(
+            ["git", "-c", "user.name=test", "-c", "user.email=test@example.com", *args],
+            cwd=repo_path,
+            capture_output=True,
+        )
+
+    def init_repo(self, repo_path):
+        self.assertEqual(self.git(repo_path, "init", "-q").returncode, 0)
+        self.assertEqual(self.git(repo_path, "commit", "--allow-empty", "-qm", "initial").returncode, 0)
+
+    def staged_report(self, repo_path):
+        output = io.StringIO()
+        with mock.patch("sys.stdout", new=output):
+            exit_code = repodx.main(
+                ["--staged", "--format", "json", "--fail-on", "never", str(repo_path)]
+            )
+        return exit_code, json.loads(output.getvalue())
+
+    def test_scans_index_contents_and_handles_unusual_paths(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            self.init_repo(repo_path)
+            relative_path = "src/odd name\n.js"
+            staged_path = repo_path / relative_path
+            staged_path.parent.mkdir()
+            token = fake("sk-", "proj-", "A1b2C3d4E5f6G7h8I9j0K1l2")
+            staged_path.write_text(f"const token = '{token}';\n", encoding="utf-8")
+            self.assertEqual(self.git(repo_path, "add", "--", relative_path).returncode, 0)
+
+            # The index still contains the secret after the working copy is cleaned up.
+            staged_path.write_text("const token = 'removed from the working tree';\n", encoding="utf-8")
+            (repo_path / "unstaged.js").write_text(
+                f"const token = '{token}';\n", encoding="utf-8"
+            )
+
+            exit_code, report = self.staged_report(repo_path)
+
+        self.assertEqual(exit_code, 0)
+        secret_findings = [finding for finding in report["findings"] if finding["id"] != "env-example"]
+        self.assertEqual([finding["path"] for finding in secret_findings], [relative_path])
+        self.assertNotIn("unstaged.js", {finding["path"] for finding in report["findings"]})
+        self.assertNotIn(token, json.dumps(report))
+
+    def test_staged_mode_skips_repository_wide_hygiene_checks(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            self.init_repo(repo_path)
+            source = repo_path / "src.js"
+            source.write_text("const answer = 42;\n", encoding="utf-8")
+            self.assertEqual(self.git(repo_path, "add", "src.js").returncode, 0)
+
+            exit_code, report = self.staged_report(repo_path)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(report["files_scanned"], 1)
+        self.assertEqual(report["findings"], [])
+        self.assertEqual(report["score"], 100)
+
+    def test_staged_mode_runs_env_supabase_firebase_and_large_file_checks(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            self.init_repo(repo_path)
+            files = {
+                ".env": "DATABASE_URL=postgres://user:placeholder@db.example.com/app\n",
+                "supabase/migrations/001_init.sql": "create table public.profiles (id int);\n",
+                "firestore.rules": "allow write: if true;\n",
+                "large.bin": "1" * 201,
+            }
+            for relative_path, contents in files.items():
+                path = repo_path / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(contents, encoding="utf-8")
+                self.assertEqual(
+                    self.git(repo_path, "add", "--", relative_path).returncode,
+                    0,
+                )
+
+            with mock.patch.multiple(
+                repodx,
+                LARGE_FILE_WARNING_BYTES=100,
+                LARGE_FILE_LIMIT_BYTES=150,
+            ):
+                exit_code, report = self.staged_report(repo_path)
+
+        self.assertEqual(exit_code, 0)
+        found_ids = {finding["id"] for finding in report["findings"]}
+        self.assertTrue({"env-file", "supabase-rls", "firebase-rules", "large-file"} <= found_ids)
+
+    def test_staged_mode_reports_non_repository_and_git_errors(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = io.StringIO()
+            with mock.patch("sys.stderr", new=output):
+                exit_code = repodx.main(["--staged", temp_dir])
+            self.assertEqual(exit_code, 2)
+            self.assertIn("inside a Git repository", output.getvalue())
+
+            output = io.StringIO()
+            with mock.patch("sys.stderr", new=output), mock.patch.object(
+                repodx.subprocess, "run", side_effect=FileNotFoundError
+            ):
+                exit_code = repodx.main(["--staged", temp_dir])
+            self.assertEqual(exit_code, 2)
+            self.assertIn("Git must be installed", output.getvalue())
+
+
+@unittest.skipUnless(shutil.which("git"), "git is not installed")
 class InstallHookTests(unittest.TestCase):
     def git(self, repo_path, *args):
         return subprocess.run(
@@ -1452,6 +1560,7 @@ class InstallHookTests(unittest.TestCase):
 
             hook_path = repo_path / ".git" / "hooks" / "pre-commit"
             self.assertIn(repodx.HOOK_MARKER, hook_path.read_text(encoding="utf-8"))
+            self.assertIn("--staged", hook_path.read_text(encoding="utf-8"))
             self.assertTrue(os.access(hook_path, os.X_OK))
 
             (repo_path / "notes.txt").write_text("hello\n", encoding="utf-8")
@@ -1461,10 +1570,29 @@ class InstallHookTests(unittest.TestCase):
             key = fake("sk-", "proj-", "A1b2C3d4E5f6G7h8I9j0K1l2")
             (repo_path / "app.js").write_text(f"const k = '{key}';\n", encoding="utf-8")
             self.git(repo_path, "add", "app.js")
+            (repo_path / "app.js").write_text("const k = 'removed from the working tree';\n", encoding="utf-8")
             blocked = self.git(repo_path, "commit", "-qm", "leak")
 
         self.assertNotEqual(blocked.returncode, 0)
         self.assertIn("commit blocked", blocked.stdout + blocked.stderr)
+
+    def test_installed_hook_ignores_unstaged_secrets(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            self.git(repo_path, "init", "-q")
+
+            with mock.patch.object(repodx.shutil, "which", return_value=None), mock.patch(
+                "sys.stdout", new=io.StringIO()
+            ):
+                self.assertEqual(repodx.main([str(repo_path), "--install-hook"]), 0)
+
+            (repo_path / "notes.txt").write_text("safe staged change\n", encoding="utf-8")
+            self.git(repo_path, "add", "notes.txt")
+            token = fake("sk-", "proj-", "A1b2C3d4E5f6G7h8I9j0K1l2")
+            (repo_path / "unstaged.js").write_text(f"const key = '{token}';\n", encoding="utf-8")
+            committed = self.git(repo_path, "commit", "-qm", "safe staged change")
+
+        self.assertEqual(committed.returncode, 0, committed.stdout + committed.stderr)
 
     def test_does_not_overwrite_a_foreign_hook(self):
         with tempfile.TemporaryDirectory() as temp_dir:
