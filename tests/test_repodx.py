@@ -1305,12 +1305,14 @@ class ReportTests(unittest.TestCase):
         version = repodx.__version__
         pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
         changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
-        readme = (root / "README.md").read_text(encoding="utf-8")
 
         self.assertIn(f'version = "{version}"', pyproject)
         self.assertEqual(re.search(r"^## (\S+)", changelog, re.MULTILINE).group(1), version)
-        self.assertEqual(set(re.findall(r"repodx@v([\d.]+)", readme)), {version})
-        self.assertEqual(set(re.findall(r"rev: v([\d.]+)", readme)), {version})
+        for name in ("README.md", "docs/README.tr.md"):
+            readme = (root / name).read_text(encoding="utf-8")
+            with self.subTest(readme=name):
+                self.assertEqual(set(re.findall(r"repodx@v([\d.]+)", readme)), {version})
+                self.assertEqual(set(re.findall(r"rev: v([\d.]+)", readme)), {version})
 
     def test_badge(self):
         report = {"score": 94, "grade": "A"}
