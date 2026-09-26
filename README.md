@@ -4,6 +4,8 @@
 [![repodx](https://img.shields.io/badge/repodx-A%20100%2F100-brightgreen)](https://github.com/omerbek/repodx)
 [![Sponsor](https://img.shields.io/github/sponsors/omerbek?label=Sponsor&logo=GitHub)](https://github.com/sponsors/omerbek)
 
+🇹🇷 [Türkçe](docs/README.tr.md)
+
 **Check your AI-built project before you push it.**
 One command, zero dependencies, and nothing leaves your machine.
 
