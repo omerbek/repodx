@@ -366,6 +366,7 @@ SECRET_PATTERNS = [
     ("GitHub token", r"\bgh[pousr]_[A-Za-z0-9]{36,}\b"),
     ("GitHub token", r"\bgithub_pat_[A-Za-z0-9_]{60,}\b"),
     ("GitLab token", r"\bglpat-[A-Za-z0-9_\-]{20,}"),
+    ("Grafana service account token", r"\bglsa_[A-Za-z0-9]{32}_[a-fA-F0-9]{8}\b"),
     ("npm access token", r"\bnpm_[A-Za-z0-9]{36}\b"),
     ("Shopify token", r"\bshp(?:at|ca|pa|ss)_[a-fA-F0-9]{32}\b"),
     ("DigitalOcean token", r"\bdo[op]_v1_[a-f0-9]{64}\b"),
@@ -425,8 +426,8 @@ COMPILED_SECRET_PATTERNS = [(name, re.compile(pattern)) for name, pattern in SEC
 # Every pattern above contains one of these strings, so lines without them are skipped quickly.
 CANDIDATE_LITERALS = [
     "sk-", "AKIA", "ASIA", "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_", "glpat-", "_live_",
-    "sb_secret_", "xox", "hf_", "npm_", "gsk_", "pplx-", "r8_", "SG.", ":AA", "AIza", "eyJ", "://", "shpat_",
-    "shpca_", "shppa_", "shpss_", "dop_v1_", "doo_v1_", "pypi-",
+    "glsa_", "sb_secret_", "xox", "hf_", "npm_", "gsk_", "pplx-", "r8_", "SG.", ":AA", "AIza", "eyJ", "://",
+    "shpat_", "shpca_", "shppa_", "shpss_", "dop_v1_", "doo_v1_", "pypi-",
 ]
 
 
