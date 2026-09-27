@@ -145,7 +145,7 @@ repos:
 
 | Önem | Kontrol |
 | --- | --- |
-| kritik | API anahtarları ve token'lar: OpenAI, Anthropic, OpenRouter, Perplexity, Replicate, Groq, Hugging Face, AWS, GitHub, GitLab, npm, PyPI, Stripe, Supabase gizli anahtarları, Shopify, DigitalOcean, Slack, SendGrid, Telegram botları, özel anahtarlar (private key) |
+| kritik | API anahtarları ve token'lar: OpenAI, Anthropic, OpenRouter, Perplexity, Replicate, Groq, Hugging Face, AWS, GitHub, GitLab, Grafana, npm, PyPI, Stripe, Supabase gizli anahtarları, Shopify, DigitalOcean, Slack, SendGrid, Telegram botları, özel anahtarlar (private key) |
 | kritik | Slack ve Discord webhook URL'leri |
 | kritik / uyarı | Tarayıcıya giden public önekli, gizli anahtar gibi görünen değişken adları (`NEXT_PUBLIC_OPENAI_API_KEY`, `VITE_STRIPE_SECRET_KEY`, `EXPO_PUBLIC_..._SERVICE_ROLE_KEY`), değerleri boş olsa bile |
 | kritik | Supabase `service_role` JWT'leri (rolü kontrol etmek için JWT çözülür; herkese açık `anon` anahtarları raporlanmaz) |
