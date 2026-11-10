@@ -137,7 +137,7 @@ Run `repodx --badge` and paste the output into your README:
 
 | Severity | Check |
 | --- | --- |
-| critical | API keys and tokens: OpenAI, Anthropic, OpenRouter, Perplexity, Replicate, Groq, Hugging Face, AWS, GitHub, GitLab, Grafana, npm, PyPI, Stripe, Supabase secret keys, Shopify, DigitalOcean, Slack, SendGrid, Telegram bots, private keys |
+| critical | API keys and tokens: OpenAI, Anthropic, OpenRouter, Perplexity, Replicate, Groq, Hugging Face, AWS, GitHub, GitLab, Grafana, npm, PyPI, Stripe, Clerk, Supabase secret keys, Shopify, DigitalOcean, Slack, SendGrid, Telegram bots, private keys |
 | critical | Slack and Discord webhook URLs |
 | critical / warning | Secret-looking variable names behind public prefixes that ship to the browser (`NEXT_PUBLIC_OPENAI_API_KEY`, `VITE_STRIPE_SECRET_KEY`, `EXPO_PUBLIC_..._SERVICE_ROLE_KEY`), even with an empty value |
 | critical | Supabase `service_role` JWTs (the JWT is decoded to check its role; public `anon` keys are not reported) |
@@ -263,3 +263,4 @@ Adding a check:
 2. Add its fix text to `FIXES`.
 3. Call it from `build_report`.
 4. Add a test in `tests/test_repodx.py`.
+
