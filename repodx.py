@@ -371,7 +371,9 @@ SECRET_PATTERNS = [
     ("Shopify token", r"\bshp(?:at|ca|pa|ss)_[a-fA-F0-9]{32}\b"),
     ("DigitalOcean token", r"\bdo[op]_v1_[a-f0-9]{64}\b"),
     ("PyPI API token", r"\bpypi-AgEIcHlwaS5vcmc[A-Za-z0-9_\-]{50,}\b"),
-    ("Stripe secret key", r"\b(?:sk|rk)_live_[A-Za-z0-9]{20,}\b"),
+    # Stripe and Clerk share the sk_live_ prefix without a documented unique suffix.
+    ("Secret key (Stripe or Clerk)", r"\bsk_live_[A-Za-z0-9]{20,}\b"),
+    ("Stripe restricted key", r"\brk_live_[A-Za-z0-9]{20,}\b"),
     ("Supabase secret key", r"\bsb_secret_[A-Za-z0-9_\-]{20,}"),
     ("Slack token", r"\bxox[abposr]-[A-Za-z0-9\-]{10,}"),
     ("Slack webhook URL", r"https://hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]+"),
@@ -1704,3 +1706,4 @@ def cli():
 
 if __name__ == "__main__":
     cli()
+

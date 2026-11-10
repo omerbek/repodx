@@ -588,7 +588,8 @@ class SecretScanTests(unittest.TestCase):
             "PyPI API token": fake(
                 "pypi-", "AgEIcHlwaS5vcmc", "q7ZT4mWx9Rb2Kd5Nf8Lp3Hs6Vc1Yj0GuE4tA_BnC7Xq2Zw5Mu6"
             ),
-            "Stripe secret key": fake("sk", "_live_", "A1b2C3d4E5f6G7h8I9j0K1"),
+            "Secret key (Stripe or Clerk)": fake("sk", "_live_", "A1b2C3d4E5f6G7h8I9j0K1"),
+            "Stripe restricted key": fake("rk", "_live_", "A1b2C3d4E5f6G7h8I9j0K1"),
             "Supabase secret key": fake("sb", "_secret_", "A1b2C3d4E5f6G7h8I9j0K1"),
             "Perplexity API key": fake("pplx", "-", "Q7zT4mWx9Rb2Kd5Nf8Lp3Hs6Vc1Yj0GuE4tA9BnC7Xq2Zw5M"),
             "Replicate API token": fake("r8", "_", "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S"),
@@ -610,6 +611,23 @@ class SecretScanTests(unittest.TestCase):
                 hits = repodx.scan_line_for_secrets(f'const key = "{key}";')
 
                 self.assertEqual([(hit[0], hit[1], hit[2]) for hit in hits], [("secret", "critical", name)])
+
+    def test_shared_stripe_clerk_prefix_has_one_neutral_finding(self):
+        for length in (20, 32, 48, 96):
+            with self.subTest(length=length):
+                suffix = ("Q7zT4mWx9Rb2Kd5Nf8Lp" * 5)[:length]
+                key = fake("sk", "_live_", suffix)
+                hits = repodx.scan_line_for_secrets(f'CLERK_SECRET_KEY="{key}"')
+                self.assertEqual(
+                    [(hit[0], hit[1], hit[2]) for hit in hits],
+                    [("secret", "critical", "Secret key (Stripe or Clerk)")],
+                )
+
+    def test_ignores_stripe_clerk_publishable_keys(self):
+        for mode in ("live", "test"):
+            with self.subTest(mode=mode):
+                key = fake("pk", "_", mode, "_", "Q7zT4mWx9Rb2Kd5Nf8Lp3Hs6Vc1Yj0Gu")
+                self.assertEqual(repodx.scan_line_for_secrets(f'key="{key}"'), [])
 
     def test_detects_digitalocean_oauth_token(self):
         key = fake("doo_v1_", "f1e2d3c4b5a69788796a5b4c3d2e1f0af9e8d7c6b5a49382716f0e1d2c3ba4b7")
@@ -1621,3 +1639,4 @@ class InstallHookTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
