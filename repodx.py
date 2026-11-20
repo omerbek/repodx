@@ -382,6 +382,8 @@ SECRET_PATTERNS = [
     ("Perplexity API key", r"\bpplx-[A-Za-z0-9]{40,}\b"),
     ("Replicate API token", r"\br8_[A-Za-z0-9]{37}\b"),
     ("SendGrid API key", r"\bSG\.[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43}\b"),
+    # Sentry DSNs are public by design; only the auth tokens carry the sntry prefix.
+    ("Sentry auth token", r"\bsntry[su]_[A-Za-z0-9+/=_\-]{40,}"),
     ("Telegram bot token", r"\b\d{8,10}:AA[A-Za-z0-9_\-]{33}\b"),
     ("Discord webhook URL", r"https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_\-]+"),
 ]
@@ -429,7 +431,7 @@ COMPILED_SECRET_PATTERNS = [(name, re.compile(pattern)) for name, pattern in SEC
 CANDIDATE_LITERALS = [
     "sk-", "AKIA", "ASIA", "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_", "glpat-", "_live_",
     "glsa_", "sb_secret_", "xox", "hf_", "npm_", "gsk_", "pplx-", "r8_", "SG.", ":AA", "AIza", "eyJ", "://",
-    "shpat_", "shpca_", "shppa_", "shpss_", "dop_v1_", "doo_v1_", "pypi-",
+    "shpat_", "shpca_", "shppa_", "shpss_", "dop_v1_", "doo_v1_", "pypi-", "sntry",
 ]
 
 
