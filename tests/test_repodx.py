@@ -613,6 +613,24 @@ class SecretScanTests(unittest.TestCase):
 
                 self.assertEqual([(hit[0], hit[1], hit[2]) for hit in hits], [("secret", "critical", name)])
 
+    def test_detects_linear_api_key_in_a_file(self):
+        key = fake("lin", "_api_", "Q7zT4mWx9Rb2Kd5Nf8Lp3Hs6Vc1Yj0GuE4tA9BnC")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = make_repo(temp_dir, {"src/config.js": f"// setup\nconst LINEAR_KEY = '{key}';\n"})
+
+            result = findings_for(repo_path, "secret")
+
+        self.assertEqual(
+            [(finding["severity"], finding["title"], finding["path"], finding["line"]) for finding in result],
+            [("critical", "Linear API key", "src/config.js", 2)],
+        )
+
+    def test_linear_api_key_needs_forty_characters(self):
+        key = fake("lin", "_api_", "Q7zT4mWx9Rb2Kd5Nf8Lp3Hs6Vc1Yj0GuE4tA9Bn")
+
+        self.assertEqual(repodx.scan_line_for_secrets(f'const key = "{key}";'), [])
+
     def test_shared_stripe_clerk_prefix_has_one_neutral_finding(self):
         for length in (20, 32, 48, 96):
             with self.subTest(length=length):
