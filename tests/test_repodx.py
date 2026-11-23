@@ -593,6 +593,7 @@ class SecretScanTests(unittest.TestCase):
             "Supabase secret key": fake("sb", "_secret_", "A1b2C3d4E5f6G7h8I9j0K1"),
             "Perplexity API key": fake("pplx", "-", "Q7zT4mWx9Rb2Kd5Nf8Lp3Hs6Vc1Yj0GuE4tA9BnC7Xq2Zw5M"),
             "Replicate API token": fake("r8", "_", "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S"),
+            "Linear API key": fake("lin", "_api_", "Q7zT4mWx9Rb2Kd5Nf8Lp3Hs6Vc1Yj0GuE4tA9BnC"),
             "Discord webhook URL": fake(
                 "https://discord.com/api/webhooks/",
                 "908172635490817263/",
