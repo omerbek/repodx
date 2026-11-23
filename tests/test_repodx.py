@@ -596,6 +596,7 @@ class SecretScanTests(unittest.TestCase):
                 "sntrys", "_", "Q7zT4mWx9Rb2Kd5Nf8Lp3Hs6Vc1Yj0GuE4tA9BnC7Xq2Zw5Mu6Ry3Kd8Nf2"
             ),
             "Replicate API token": fake("r8", "_", "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S"),
+            "Linear API key": fake("lin", "_api_", "Q7zT4mWx9Rb2Kd5Nf8Lp3Hs6Vc1Yj0GuE4tA9BnC"),
             "Discord webhook URL": fake(
                 "https://discord.com/api/webhooks/",
                 "908172635490817263/",
@@ -614,6 +615,24 @@ class SecretScanTests(unittest.TestCase):
                 hits = repodx.scan_line_for_secrets(f'const key = "{key}";')
 
                 self.assertEqual([(hit[0], hit[1], hit[2]) for hit in hits], [("secret", "critical", name)])
+
+    def test_detects_linear_api_key_in_a_file(self):
+        key = fake("lin", "_api_", "Q7zT4mWx9Rb2Kd5Nf8Lp3Hs6Vc1Yj0GuE4tA9BnC")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = make_repo(temp_dir, {"src/config.js": f"// setup\nconst LINEAR_KEY = '{key}';\n"})
+
+            result = findings_for(repo_path, "secret")
+
+        self.assertEqual(
+            [(finding["severity"], finding["title"], finding["path"], finding["line"]) for finding in result],
+            [("critical", "Linear API key", "src/config.js", 2)],
+        )
+
+    def test_linear_api_key_needs_forty_characters(self):
+        key = fake("lin", "_api_", "Q7zT4mWx9Rb2Kd5Nf8Lp3Hs6Vc1Yj0GuE4tA9Bn")
+
+        self.assertEqual(repodx.scan_line_for_secrets(f'const key = "{key}";'), [])
 
     def test_shared_stripe_clerk_prefix_has_one_neutral_finding(self):
         for length in (20, 32, 48, 96):
