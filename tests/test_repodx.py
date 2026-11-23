@@ -592,6 +592,9 @@ class SecretScanTests(unittest.TestCase):
             "Stripe restricted key": fake("rk", "_live_", "A1b2C3d4E5f6G7h8I9j0K1"),
             "Supabase secret key": fake("sb", "_secret_", "A1b2C3d4E5f6G7h8I9j0K1"),
             "Perplexity API key": fake("pplx", "-", "Q7zT4mWx9Rb2Kd5Nf8Lp3Hs6Vc1Yj0GuE4tA9BnC7Xq2Zw5M"),
+            "Sentry auth token": fake(
+                "sntrys", "_", "Q7zT4mWx9Rb2Kd5Nf8Lp3Hs6Vc1Yj0GuE4tA9BnC7Xq2Zw5Mu6Ry3Kd8Nf2"
+            ),
             "Replicate API token": fake("r8", "_", "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S"),
             "Discord webhook URL": fake(
                 "https://discord.com/api/webhooks/",
@@ -649,6 +652,19 @@ class SecretScanTests(unittest.TestCase):
         line = fake("webhook: ", "https://hooks.slack.com/services/XXXX/XXXX/XXXX")
 
         self.assertEqual(repodx.scan_line_for_secrets(line), [])
+
+    def test_ignores_sentry_dsn(self):
+        # A DSN is public by design and must not be reported as a leaked key.
+        line = fake("SENTRY_DSN=", "https://abc123@o123456.ingest.sentry.io/7890123")
+
+        self.assertEqual(repodx.scan_line_for_secrets(line), [])
+
+    def test_detects_sentry_user_token(self):
+        key = fake("sntryu", "_", "Q7zT4mWx9Rb2Kd5Nf8Lp3Hs6Vc1Yj0GuE4tA9BnC7Xq2Zw5Mu6Ry3Kd8Nf2")
+
+        hits = repodx.scan_line_for_secrets(f'SENTRY_AUTH_TOKEN="{key}"')
+
+        self.assertEqual([(hit[0], hit[1], hit[2]) for hit in hits], [("secret", "critical", "Sentry auth token")])
 
     def test_ignores_documentation_placeholders(self):
         lines = [
