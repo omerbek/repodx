@@ -381,6 +381,7 @@ SECRET_PATTERNS = [
     ("Groq API key", r"\bgsk_[A-Za-z0-9]{48,}\b"),
     ("Perplexity API key", r"\bpplx-[A-Za-z0-9]{40,}\b"),
     ("Replicate API token", r"\br8_[A-Za-z0-9]{37}\b"),
+    ("Mapbox secret token", r"\bsk\.eyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{20,}"),
     ("Linear API key", r"\blin_api_[A-Za-z0-9]{40}\b"),
     ("SendGrid API key", r"\bSG\.[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43}\b"),
     # Sentry DSNs are public by design; only the auth tokens carry the sntry prefix.

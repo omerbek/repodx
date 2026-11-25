@@ -571,6 +571,28 @@ def findings_for(repo_path, check_id):
 
 
 class SecretScanTests(unittest.TestCase):
+    def test_mapbox_secret_token_is_reported_once_but_public_token_is_not(self):
+        payload = base64.urlsafe_b64encode(
+            json.dumps({"u": "scanner-test", "a": "q7ZT4mWx9Rb2Kd5Nf8Lp"}).encode()
+        ).decode().rstrip("=")
+        signature = fake("Q7zT4mWx9Rb2", "Kd5Nf8Lp3Hs6Vc1Yj0GuE4tA_-")
+        secret = fake("sk", ".", payload, ".", signature)
+        public = fake("pk", ".", payload, ".", signature)
+        self.assertTrue(repodx.has_candidate(secret))
+        self.assertEqual(
+            repodx.scan_line_for_secrets(f'const key = "{secret}";'),
+            [("secret", "critical", "Mapbox secret token", secret)],
+        )
+        self.assertEqual(repodx.scan_line_for_secrets(f'const key = "{public}";'), [])
+
+    def test_mapbox_detection_reaches_file_scanner(self):
+        secret = fake("sk", ".eyJ", "q7ZT4mWx9Rb2Kd5Nf8Lp3Hs6", ".", "Q7zT4mWx9Rb2Kd5Nf8Lp3Hs6")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = make_repo(temp_dir, {"map.js": f'const key = "{secret}";\n'})
+            hits = findings_for(repo, "secret")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["title"], "Mapbox secret token")
+
     def test_detects_provider_keys(self):
         keys = {
             "OpenAI API key": fake("sk-", "proj-", "A1b2C3d4E5f6G7h8I9j0K1l2"),
